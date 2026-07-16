@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "participantCode": "P001",
+  "exportedAt": "2026-07-15T09:00:00.000Z",
+  "session": {
+    "questionCount": 20,
+    "completedCount": 1
+  },
+  "records": [
+    {
+      "sentenceId": "sent_0001",
+      "sentence": "Bugün evde hızlıca kapıyı açmalısın.",
+      "score": 100,
+      "durationMs": 42000,
+      "firstAttemptSuccess": true,
+      "hintCount": 0,
+      "primaryError": null,
+      "wrongLabels": [],
+      "lesson": "ofzinnz-temel",
+      "difficulty": 2,
+      "isTransfer": false
+    }
+  ],
+  "userReport": {
+    "solvedCount": 1,
+    "averageScore": 100,
+    "strongestSkills": ["özne", "ortaç", "durum zarfı"],
+    "weakestSkills": ["özne", "ortaç", "durum zarfı"],
+    "transferSuccess": 0,
+    "studyRecommendation": "özne becerisini transfer cümlelerinde test et.",
+    "firstAttemptRate": 100,
+    "averageHintUsage": 0
+  },
+  "teachingAnalytics": {
+    "mostErroredLabels": [],
+    "hardestSentences": [
+      {
+        "sentence": "Bugün evde hızlıca kapıyı açmalısın.",
+        "averageScore": 100,
+        "attempts": 1
+      }
+    ],
+    "averageDurationMs": 42000,
+    "mostCommonError": null
+  }
+}
