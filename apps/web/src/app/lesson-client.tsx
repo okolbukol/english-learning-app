@@ -6,7 +6,7 @@ import {
   type ElementCode,
   type SentenceDefinition
 } from "@html2pdf-pro/teaching-engine";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   buildTeachingAnalytics,
   buildUserReport,
@@ -17,6 +17,13 @@ import {
   serializeAnalyticsJson,
   type SolvedSentenceRecord
 } from "../lib/learning-analytics";
+import {
+  browserSessionStorage,
+  clearSession,
+  createPersistedSession,
+  loadSession,
+  saveSession
+} from "../lib/session-storage";
 
 const elementCodes: ElementCode[] = ["Ö", "F", "Z1", "İm", "N1", "N2", "Z2"];
 const sessionQuestions = createTestSession(stageOneSentences, 20);
@@ -45,6 +52,8 @@ export function LessonClient() {
   const [hintCount, setHintCount] = useState(0);
   const [records, setRecords] = useState<SolvedSentenceRecord[]>([]);
   const [participantCode, setParticipantCode] = useState("P001");
+  const [restoredAt, setRestoredAt] = useState<string | null>(null);
+  const [isRestoreChecked, setIsRestoreChecked] = useState(false);
 
   const activeQuestion = sessionQuestions[questionIndex] ?? firstQuestion;
   const sentence = activeQuestion.sentence;
@@ -88,6 +97,58 @@ export function LessonClient() {
       }),
     [participantCode, participantCodeIsValid, records]
   );
+
+  // Restore an interrupted session once, after mount, so the server-rendered
+  // markup and the first client render stay identical.
+  useEffect(() => {
+    const stored = loadSession(browserSessionStorage());
+
+    if (stored && stored.records.length > 0) {
+      const restoredIndex = Math.min(stored.questionIndex, sessionQuestions.length - 1);
+      const restoredSentence = sessionQuestions[restoredIndex]?.sentence;
+
+      setParticipantCode(stored.participantCode);
+      setRecords(stored.records);
+      setQuestionIndex(restoredIndex);
+      setAssignments(emptyAssignmentsFor(partsFor(restoredSentence)));
+      setOrder(["Ö", "F", "Z1", "İm", "N1", "N2", "Z2"]);
+      setFinalSentence("");
+      setHasSubmitted(false);
+      setQuestionStartedAt(Date.now());
+      setAttemptNumber(1);
+      setHintCount(0);
+      setRestoredAt(stored.savedAt);
+    }
+
+    setIsRestoreChecked(true);
+  }, []);
+
+  // Keep the stored copy in sync only after a first answer exists, so an
+  // untouched visit never leaves a session behind.
+  useEffect(() => {
+    if (!isRestoreChecked || records.length === 0 || !participantCodeIsValid) {
+      return;
+    }
+
+    saveSession(
+      browserSessionStorage(),
+      createPersistedSession({ participantCode, questionIndex, records })
+    );
+  }, [isRestoreChecked, participantCode, participantCodeIsValid, questionIndex, records]);
+
+  function resetSession() {
+    clearSession(browserSessionStorage());
+    setRecords([]);
+    setQuestionIndex(0);
+    setAssignments(emptyAssignmentsFor(partsFor(firstQuestion.sentence)));
+    setOrder(["Ö", "F", "Z1", "İm", "N1", "N2", "Z2"]);
+    setFinalSentence("");
+    setHasSubmitted(false);
+    setQuestionStartedAt(Date.now());
+    setAttemptNumber(1);
+    setHintCount(0);
+    setRestoredAt(null);
+  }
 
   function submitCurrentAttempt() {
     const durationMs = Date.now() - questionStartedAt;
@@ -158,6 +219,11 @@ export function LessonClient() {
               canMoveNext={hasSubmitted && !isLastQuestion}
               isLastQuestion={isLastQuestion}
               onNext={moveToNextQuestion}
+            />
+            <SessionRecoveryPanel
+              restoredAt={restoredAt}
+              savedRecordCount={records.length}
+              onReset={resetSession}
             />
           </aside>
         </section>
@@ -401,6 +467,59 @@ function SessionControls({
           Sonraki soru
         </button>
       )}
+    </section>
+  );
+}
+
+function SessionRecoveryPanel({
+  restoredAt,
+  savedRecordCount,
+  onReset
+}: {
+  restoredAt: string | null;
+  savedRecordCount: number;
+  onReset: () => void;
+}) {
+  const [confirmReset, setConfirmReset] = useState(false);
+
+  return (
+    <section className="border border-slate-200 bg-white p-5">
+      <h2 className="text-lg font-semibold">Oturum Kaydı</h2>
+      {restoredAt ? (
+        <p className="mt-3 text-sm leading-6 text-emerald-700">
+          Yarım kalan oturum geri yüklendi. Bulunduğun soruyu baştan çözüp tekrar denetle.
+        </p>
+      ) : savedRecordCount > 0 ? (
+        <p className="mt-3 text-sm leading-6 text-slate-600">
+          Cevapların bu tarayıcıya kaydediliyor. Sayfa yenilenirse oturum kaldığı yerden devam eder.
+        </p>
+      ) : (
+        <p className="mt-3 text-sm leading-6 text-slate-600">
+          İlk denetlemeden sonra oturum bu tarayıcıya kaydedilir.
+        </p>
+      )}
+      <p className="mt-3 text-sm text-slate-500">Kayıtlı cevap: {savedRecordCount}</p>
+      <button
+        className="mt-4 h-11 w-full border border-slate-700 px-4 font-semibold text-slate-800 disabled:cursor-not-allowed disabled:border-slate-300 disabled:text-slate-400"
+        type="button"
+        disabled={savedRecordCount === 0}
+        onClick={() => {
+          if (!confirmReset) {
+            setConfirmReset(true);
+            return;
+          }
+
+          setConfirmReset(false);
+          onReset();
+        }}
+      >
+        {confirmReset ? "Emin misin? Tekrar bas" : "Yeni katılımcı için sıfırla"}
+      </button>
+      {confirmReset ? (
+        <p className="mt-2 text-xs leading-5 text-rose-700">
+          Sıfırlarsan bu oturumun cevapları silinir. Önce JSON veya CSV indir.
+        </p>
+      ) : null}
     </section>
   );
 }
