@@ -17,6 +17,7 @@ import {
   serializeAnalyticsJson,
   type SolvedSentenceRecord
 } from "../lib/learning-analytics";
+import { MAX_HINT_LEVEL, buildHints, type LessonHint } from "../lib/lesson-hints";
 import {
   browserSessionStorage,
   clearSession,
@@ -50,6 +51,7 @@ export function LessonClient() {
   const [questionStartedAt, setQuestionStartedAt] = useState(() => Date.now());
   const [attemptNumber, setAttemptNumber] = useState(1);
   const [hintCount, setHintCount] = useState(0);
+  const [hintLevel, setHintLevel] = useState(0);
   const [records, setRecords] = useState<SolvedSentenceRecord[]>([]);
   const [participantCode, setParticipantCode] = useState("P001");
   const [restoredAt, setRestoredAt] = useState<string | null>(null);
@@ -85,6 +87,7 @@ export function LessonClient() {
     });
   }, [assignments, finalSentence, order, selectableParts, sentence]);
 
+  const hints = useMemo(() => buildHints(sentence, evaluation, hintLevel), [evaluation, hintLevel, sentence]);
   const primaryIssue = evaluation.steps.find((step) => !step.isCorrect);
   const userReport = useMemo(() => buildUserReport(records), [records]);
   const teachingAnalytics = useMemo(() => buildTeachingAnalytics(records), [records]);
@@ -117,6 +120,7 @@ export function LessonClient() {
       setQuestionStartedAt(Date.now());
       setAttemptNumber(1);
       setHintCount(0);
+      setHintLevel(0);
       setRestoredAt(stored.savedAt);
     }
 
@@ -147,7 +151,19 @@ export function LessonClient() {
     setQuestionStartedAt(Date.now());
     setAttemptNumber(1);
     setHintCount(0);
+    setHintLevel(0);
     setRestoredAt(null);
+  }
+
+  // One counted request per revealed hint, so hintCount always equals the
+  // number of hints the participant actually saw.
+  function requestHint() {
+    if (hintLevel >= MAX_HINT_LEVEL) {
+      return;
+    }
+
+    setHintLevel((current) => current + 1);
+    setHintCount((current) => current + 1);
   }
 
   function submitCurrentAttempt() {
@@ -177,6 +193,7 @@ export function LessonClient() {
     setQuestionStartedAt(Date.now());
     setAttemptNumber(1);
     setHintCount(0);
+    setHintLevel(0);
   }
 
   return (
@@ -205,9 +222,11 @@ export function LessonClient() {
             <OrderPanel order={order} onChange={setOrder} />
             <FinalSentencePanel
               hintCount={hintCount}
+              hints={hints}
+              canRequestHint={hintLevel < MAX_HINT_LEVEL}
               value={finalSentence}
               onChange={setFinalSentence}
-              onHint={() => setHintCount((current) => current + 1)}
+              onHint={requestHint}
               onSubmit={submitCurrentAttempt}
             />
           </div>
@@ -351,12 +370,16 @@ function OrderPanel({ order, onChange }: { order: ElementCode[]; onChange: (next
 function FinalSentencePanel({
   value,
   hintCount,
+  hints,
+  canRequestHint,
   onChange,
   onHint,
   onSubmit
 }: {
   value: string;
   hintCount: number;
+  hints: LessonHint[];
+  canRequestHint: boolean;
   onChange: (next: string) => void;
   onHint: () => void;
   onSubmit: () => void;
@@ -371,13 +394,37 @@ function FinalSentencePanel({
           value={value}
           onChange={(event) => onChange(event.target.value)}
         />
-        <button className="h-12 border border-cyan-700 px-5 font-semibold text-cyan-800" type="button" onClick={onHint}>
+        <button
+          className="h-12 border border-cyan-700 px-5 font-semibold text-cyan-800 disabled:cursor-not-allowed disabled:border-slate-300 disabled:text-slate-400"
+          type="button"
+          disabled={!canRequestHint}
+          onClick={onHint}
+        >
           İpucu ({hintCount})
         </button>
         <button className="h-12 bg-cyan-700 px-5 font-semibold text-white" type="button" onClick={onSubmit}>
           Denetle
         </button>
       </div>
+      {hints.length === 0 ? (
+        <p className="mt-4 text-sm leading-6 text-slate-500">
+          Takılırsan İpucu düğmesine bas. İpuçları adım adım açılır ve hazır cümleyi vermez.
+        </p>
+      ) : (
+        <div className="mt-4 space-y-3">
+          {hints.map((hint) => (
+            <div key={hint.level} className="border-l-2 border-cyan-700 bg-slate-50 px-4 py-3">
+              <p className="text-sm font-semibold text-cyan-800">{hint.title}</p>
+              <p className="mt-1 text-sm leading-6 text-slate-700">{hint.body}</p>
+            </div>
+          ))}
+          {!canRequestHint ? (
+            <p className="text-xs leading-5 text-slate-500">
+              Son ipucundasın. Kalan öğeleri kendin yerleştir.
+            </p>
+          ) : null}
+        </div>
+      )}
     </section>
   );
 }
